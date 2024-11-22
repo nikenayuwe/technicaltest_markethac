@@ -1,0 +1,22 @@
+BEGIN
+
+CREATE TEMP TABLE report_monthly_orders_product_agg AS --CREATE TEMP TABLE merupakan query untuk membuat temporary table dengan nama report_monthly_orders_product_agg.
+SELECT oi.order_id, oi.product_id, oi.sale_price * od.num_of_item AS total, EXTRACT(MONTH FROM oi.delivered_at) AS month --Query ini memilih kolom order_id dan product_id dari `bigquery-public-data.thelook_ecommerce.order_items, membentuk 
+--kolom baru yang berisi perkalian antara sale_price pada tabel order_items dan num_of_item pada tabel orders dan kemudian diberi nama 'total', serta memilih bulan dari kolom delivered_at pada tabel order_items.
+FROM `bigquery-public-data.thelook_ecommerce.order_items` AS oi --Query ini mengakses data dari tabel users yang berada dalam dataset thelook_ecommerce yang merupakan bagian dari bigquery-public-data dan diberi nama alias oi untuk mempermudah penulisan query.
+INNER JOIN `bigquery-public-data.thelook_ecommerce.orders` AS od --Query ini menggabungkan tabel orders dengan order_items dan diberi nama alias od untuk mempermudah query.
+ON oi.order_id = od.order_id --Key kolom dari kedua tabel
+WHERE oi.status = 'Complete'; --Kondisi dimana pemilihan baris hanya pada yangberstatus 'Complete' karena terkait dengan penjualan (complete delivered) 
+
+SELECT rp.product_id, pr.name, rp.total, rp.month --Memilih kolom product_id, total, month dari temporary tabel yang sudah dibentuk, serta memilih kolom name pada tabel pproducts
+FROM
+  (SELECT rp1.product_id, rp1.month, rp1.total, RANK() OVER(PARTITION BY rp1.month ORDER BY rp1.total DESC) AS rank
+    FROM report_monthly_orders_product_agg AS rp1) AS rp -- Mengakses data dari tabel temporary report_monthly_orders_product_agg dengan memberi nama subquery menjadi rp. 
+    --rp berisi tabel dengan data product_id dan month pada tabel temporary. RANK() digunakan untuk memberikan peringkat pada produk di setiap bulan (PARTITION BY rp1.total DESC)..
+    --ORDER BY rp1.total DESC untuk mengurutkan produk bersadarkan total penjualan dalam urutan DESCENDING.
+INNER JOIN `bigquery-public-data.thelook_ecommerce.products` AS pr --Menggabungkan tabel products dan diberi nama alias pr.
+ON rp.product_id = pr.id --Key kolom dari kedua tabel
+WHERE rank = 1 -- Kondisi memilih hanya produk dengan pernjualan tertinggi per bulan.
+ORDER BY rp.month; --Mengurutkan produk berdasarkan month
+
+END;
